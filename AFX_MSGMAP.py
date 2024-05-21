@@ -1,4 +1,19 @@
-﻿# pylint: disable=C0301,C0103,C0111
+﻿# FROM https://github.com/HongThatCong/AFX_MSGMAP/tree/master
+
+# struct AFX_MSGMAP{
+#     AFX_MSGMAP * pBaseMessageMap;
+#     AFX_MSGMAP_ENTRY * lpEntries;
+# }
+# struct AFX_MSGMAP_ENTRY{
+#     UINT nMessage;    //Windows Message
+#     UINT nCode        //Control code or WM_NOTIFY code
+#     UINT nID;         //control ID (or 0 for windows messages)
+#     UINT nLastID;     //used for entries specifying a range of control id's
+#     UINT nSig;        //signature type(action) or pointer to message 
+#     AFX_PMSG pfn;     //routine to call (or specical value)
+# }
+
+# pylint: disable=C0301,C0103,C0111
 
 # ==============================================================================
 #
@@ -17,6 +32,8 @@ import idc
 import ida_segment
 import ida_nalt
 import ida_moves
+
+debug = False
 
 # Constants
 
@@ -1774,7 +1791,8 @@ class AFXStructs(object):
         self.isDll = (idc.get_inf_attr(idc.INF_LFLAGS) & idc.LFLG_IS_DLL) != 0
         self.ptrSize = 8 if IS64 else 4
 
-        self.MSGStructSize = 32 if IS64 else 32
+        # self.MSGStructSize = 32 if IS64 else 32       # 这写错了吧
+        self.MSGStructSize = 16 + 2*self.ptrSize
 
     @staticmethod
     def mt_rva():
@@ -2009,14 +2027,17 @@ class AFXStructs(object):
 
     def Check_MSGMAP(self, addr, seg_start_ea, seg_end_ea):
         pBaseMap = self.get_DWORD_PTR(addr, 0)
-        if not seg_start_ea < pBaseMap < seg_end_ea:
+        if not idaapi.get_func(pBaseMap):
+            print("BaseMap addr %x not in range" %pBaseMap)
             return 0
 
         lpEntries = self.get_DWORD_PTR(addr, 1)
         if not seg_start_ea < lpEntries < seg_end_ea:
+            print("lpEntries addr %x not in range" %lpEntries)
             return 0
 
         if self.Check_MSG_ENTRY(lpEntries) == 0:
+            print("MSG_ENTRY not correct")
             return 0
 
         if idc.get_wide_dword(lpEntries + 0) == 0 and \
@@ -2025,14 +2046,18 @@ class AFXStructs(object):
              idc.get_wide_dword(lpEntries + 12) != 0 or
              self.get_DWORD_PTR(lpEntries + 16) != 0 or
              self.get_pfn(lpEntries) != 0):
+            print("struct AFX_MSGMAP_ENTRY not fix at %x" %lpEntries)
             return 0
 
         if idaapi.get_name(addr) == "":
             if idaapi.get_name(pBaseMap) == "":
+                print("pBaseMap No name: %x" %pBaseMap)
                 return 0
+            print("Screen addr No name: %x" %addr)
             return -1
 
         if idaapi.get_name(pBaseMap)[0:18] == "?GetThisMessageMap":
+            print("Found Name ?GetThisMessageMap at %x" %pBaseMap)
             return 1
 
         while lpEntries < self.max_ea:
@@ -2045,33 +2070,59 @@ class AFXStructs(object):
                 return 1
 
             if self.Check_MSG_ENTRY(lpEntries) == 0:
+                print("Check MSG_ENTRY failed")
                 return 0
 
             msgfun_addr = self.get_pfn(lpEntries)
             if not self.min_ea < msgfun_addr < self.max_ea:
+                print("msgfun_addr %x not in range" %msgfun_addr)
                 return 0
 
             lpEntries = lpEntries + self.MSGStructSize
 
+        print("Cannot find end of MSG_ENTRY")
         return 0
 
     def Check_MSG_ENTRY(self, entry):
         if entry == idc.BADADDR:
+            print("entry address %x incorrect" %entry)
             return 0
+        else:
+            if debug:
+                print("MSG_ENTRY at %x" %entry)
         # Check nMessage
-        if idc.get_wide_dword(entry) > 0xFFFF:
+        nMessage = idc.get_wide_dword(entry)
+        if nMessage > 0xFFFF:
+            print("nMessage %d out of range at address %x" %(nMessage, entry))
             return 0
+        else:
+            if debug:
+                print("nMessage %d at %x" %(nMessage, entry))
         # Check nID
-        if idc.get_wide_dword(entry + 8) > 0xFFFF:
+        nID = idc.get_wide_dword(entry + 8)
+        if nID > 0xFFFF:
+            print("nID %d out of range at address %x" %(nID, entry+8))
             return 0
+        else:
+            if debug:
+                print("nID %d at %x" %(nID, entry+8))
         # Check nLastID
-        if idc.get_wide_dword(entry + 12) > 0xFFFF:
+        nLastID = idc.get_wide_dword(entry + 12)
+        if nLastID > 0xFFFF:
+            print("nLastID %d out of range at address %x" %(nLastID, entry+12))
             return 0
+        else:
+            if debug:
+                print("nLastID %d at %x" %(nLastID, entry+12))
         # Check nSig
         nSig = self.get_DWORD_PTR(entry + 16)
         if nSig > len(AfxSig) + 20:  # + 20 for future MFC new AfxSig
             if not self.min_ea < nSig < self.max_ea:  # point message
+                print("nSig %d out of range at address %x" %(nSig, entry+16))
                 return 0
+        else:
+            if debug:
+                print("nSig %d at %x" %(nSig, entry+16))
 
         return 1
 
@@ -2228,7 +2279,7 @@ class MenuContextHandler(idaapi.action_handler_t):
 
     @classmethod
     def update(cls, ctx):
-        return idaapi.AST_ENABLE_FOR_FORM if ctx.form_type == idaapi.BWN_DISASM else idaapi.AST_DISABLE_FOR_FORM
+        return idaapi.AST_ENABLE_FOR_WIDGET if ctx.form_type == idaapi.BWN_DISASM else idaapi.AST_DISABLE_FOR_WIDGET
 
 # Context menu for make MSGMAP
 class Make_MSGMAP_MCH(MenuContextHandler):
