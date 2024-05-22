@@ -1,16 +1,17 @@
+FORK FROM https://github.com/HongThatCong/AFX_MSGMAP/tree/master
+
+See original readme at [README_old.md](README_old.md)
+
 # AFX_MSGMAP
-IDAPython plugin to parse AFX_MSG in VC++ MFC application
 
-Code ban đầu của Snow 85703533
+Recognize and reconstruct the AFX_MSGMAP structure for MFC program
 
-Port lên IDAPython IDA 7.x
+changelog:
 
-Add some internal MFC structs
+* Fix some bug and change some API to support IDA 7.5
 
-Code chưa finish nhé mọi người, chưa port xong :D
+* Track the dependencies and rename the AFX_MSGMAP to corresponding MFC class
 
-# TODO
-- Viết lại các hàm xác định và parse AFX_MSGMAP, AFX_MSGMAP_ENTRY
-- Parse CRuntimeClass, add popup menu and context menu handler
-- Pase các AFX_XXXMAP và AFX_XXXMAP_ENTRY còn lại, quan trong nhất là AFX_INTERFACEMAP
-- Flow Graph cho các CRuntimeClass của các class.
+
+
+

@@ -1,4 +1,4 @@
-﻿# FROM https://github.com/HongThatCong/AFX_MSGMAP/tree/master
+# FROM https://github.com/HongThatCong/AFX_MSGMAP/tree/master
 
 # struct AFX_MSGMAP{
 #     AFX_MSGMAP * pBaseMessageMap;
@@ -32,6 +32,12 @@ import idc
 import ida_segment
 import ida_nalt
 import ida_moves
+import ida_name
+import idautils
+
+import sys
+import re
+import logging
 
 debug = False
 
@@ -1674,6 +1680,55 @@ S_CRTC_CreateObject = "?CreateObject@%s@@SAPEAVCObject@@XZ"
 MENU_PATH = "Search/%s/" % PLUGIN_NAME
 POPUP_PATH = "%s/" % PLUGIN_NAME
 
+
+class logger_t(object):
+    stream_loglevel = (logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR)
+    # stream_loglevel = (logging.INFO, logging.WARNING, logging.ERROR)
+    file_loglevel = (logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR)
+    # file_loglevel = (logging.ERROR, )
+
+    def __init__(self, filename="", stream_loglevel=None, file_loglevel=None):
+        if stream_loglevel != None:
+            self.stream_loglevel = stream_loglevel
+        if file_loglevel != None:
+            self.file_loglevel = file_loglevel
+
+        self.log = logging.getLogger()
+        self.log.setLevel(logging.DEBUG)
+
+        self.streamlog = logging.StreamHandler(sys.stderr)
+        stream_filter = logging.Filter()
+        stream_filter.filter = lambda record: record.levelno in self.stream_loglevel
+        self.streamlog.addFilter(stream_filter)
+
+        self.log.addHandler(self.streamlog)
+
+        if filename != "":
+            self.filelog = logging.FileHandler(filename, "w")
+            filefitler = logging.Filter()
+            filefitler.filter = lambda record: record.levelno in self.file_loglevel
+            self.filelog.addFilter(filefitler)
+
+            self.log.addHandler(self.filelog)
+
+    def debug(self, msg):
+        return self.log.debug(msg)
+
+    def info(self, msg):
+        return self.log.info(msg)
+
+    def warning(self, msg):
+        return self.log.warning(msg)
+
+    def error(self, msg):
+        return self.log.error(msg)
+
+if debug:
+    logger = logger_t(stream_loglevel=(logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR))
+else:
+    logger = logger_t(stream_loglevel=(logging.INFO, logging.WARNING, logging.ERROR))
+
+
 # Utility functions
 
 class Utils(object):
@@ -2028,16 +2083,16 @@ class AFXStructs(object):
     def Check_MSGMAP(self, addr, seg_start_ea, seg_end_ea):
         pBaseMap = self.get_DWORD_PTR(addr, 0)
         if not idaapi.get_func(pBaseMap):
-            print("BaseMap addr %x not in range" %pBaseMap)
+            logger.debug("BaseMap addr %x not in range" %pBaseMap)
             return 0
 
         lpEntries = self.get_DWORD_PTR(addr, 1)
         if not seg_start_ea < lpEntries < seg_end_ea:
-            print("lpEntries addr %x not in range" %lpEntries)
+            logger.debug("lpEntries addr %x not in range" %lpEntries)
             return 0
 
         if self.Check_MSG_ENTRY(lpEntries) == 0:
-            print("MSG_ENTRY not correct")
+            logger.debug("MSG_ENTRY not correct")
             return 0
 
         if idc.get_wide_dword(lpEntries + 0) == 0 and \
@@ -2046,18 +2101,18 @@ class AFXStructs(object):
              idc.get_wide_dword(lpEntries + 12) != 0 or
              self.get_DWORD_PTR(lpEntries + 16) != 0 or
              self.get_pfn(lpEntries) != 0):
-            print("struct AFX_MSGMAP_ENTRY not fix at %x" %lpEntries)
+            logger.debug("struct AFX_MSGMAP_ENTRY not fix at %x" %lpEntries)
             return 0
 
         if idaapi.get_name(addr) == "":
             if idaapi.get_name(pBaseMap) == "":
-                print("pBaseMap No name: %x" %pBaseMap)
+                logger.debug("pBaseMap No name: %x" %pBaseMap)
                 return 0
-            print("Screen addr No name: %x" %addr)
+            logger.debug("Screen addr No name: %x" %addr)
             return -1
 
         if idaapi.get_name(pBaseMap)[0:18] == "?GetThisMessageMap":
-            print("Found Name ?GetThisMessageMap at %x" %pBaseMap)
+            logger.debug("Found Name ?GetThisMessageMap at %x" %pBaseMap)
             return 1
 
         while lpEntries < self.max_ea:
@@ -2070,61 +2125,66 @@ class AFXStructs(object):
                 return 1
 
             if self.Check_MSG_ENTRY(lpEntries) == 0:
-                print("Check MSG_ENTRY failed")
+                logger.debug("Check MSG_ENTRY failed")
                 return 0
 
             msgfun_addr = self.get_pfn(lpEntries)
             if not self.min_ea < msgfun_addr < self.max_ea:
-                print("msgfun_addr %x not in range" %msgfun_addr)
+                logger.debug("msgfun_addr %x not in range" %msgfun_addr)
                 return 0
 
             lpEntries = lpEntries + self.MSGStructSize
-
-        print("Cannot find end of MSG_ENTRY")
+        logger.debug("Cannot find end of MSG_ENTRY")
         return 0
 
     def Check_MSG_ENTRY(self, entry):
         if entry == idc.BADADDR:
-            print("entry address %x incorrect" %entry)
+            logger.debug("entry address %x incorrect" %entry)
             return 0
         else:
-            if debug:
-                print("MSG_ENTRY at %x" %entry)
+            logger.debug("MSG_ENTRY at %x" %entry)
         # Check nMessage
         nMessage = idc.get_wide_dword(entry)
         if nMessage > 0xFFFF:
-            print("nMessage %d out of range at address %x" %(nMessage, entry))
+            logger.debug("nMessage %d out of range at address %x" %(nMessage, entry))
             return 0
         else:
-            if debug:
-                print("nMessage %d at %x" %(nMessage, entry))
+            logger.debug("nMessage %d at %x" %(nMessage, entry))
         # Check nID
         nID = idc.get_wide_dword(entry + 8)
         if nID > 0xFFFF:
-            print("nID %d out of range at address %x" %(nID, entry+8))
+            logger.debug("nID %d out of range at address %x" %(nID, entry+8))
             return 0
         else:
-            if debug:
-                print("nID %d at %x" %(nID, entry+8))
+            logger.debug("nID %d at %x" %(nID, entry+8))
         # Check nLastID
         nLastID = idc.get_wide_dword(entry + 12)
         if nLastID > 0xFFFF:
-            print("nLastID %d out of range at address %x" %(nLastID, entry+12))
+            logger.debug("nLastID %d out of range at address %x" %(nLastID, entry+12))
             return 0
         else:
-            if debug:
-                print("nLastID %d at %x" %(nLastID, entry+12))
+            logger.debug("nLastID %d at %x" %(nLastID, entry+12))
         # Check nSig
         nSig = self.get_DWORD_PTR(entry + 16)
         if nSig > len(AfxSig) + 20:  # + 20 for future MFC new AfxSig
             if not self.min_ea < nSig < self.max_ea:  # point message
-                print("nSig %d out of range at address %x" %(nSig, entry+16))
+                logger.debug("nSig %d out of range at address %x" %(nSig, entry+16))
                 return 0
         else:
-            if debug:
-                print("nSig %d at %x" %(nSig, entry+16))
+            logger.debug("nSig %d at %x" %(nSig, entry+16))
 
         return 1
+
+    def _get_class_name(self, name):
+        pattern = re.compile(r"[a-zA-Z0-9]+")
+        name_lst = pattern.findall(name)
+        for i in range(len(name_lst)):
+            name = name_lst[i]
+            for j in range(len(name)):
+                if name[j].isalpha():
+                    name_lst[i] = name[j:]
+                    break
+        return name_lst
 
     def Make_MSG_ENTRY(self, addr):
         msgmapSize = 0
@@ -2176,6 +2236,71 @@ class AFXStructs(object):
         idc.del_items(pEntry, idc.DELIT_SIMPLE, self.MSGStructSize)
         idc.create_struct(pEntry, self.MSGStructSize, S_MSGMAP_ENTRY)
         msgmapSize = pEntry - lpEntries + self.MSGStructSize
+        
+        # corresponding to class
+        if addr == 0x10048f8c:
+            breakpoint()
+        xref_1 = [i for i in idautils.XrefsTo(addr)]
+        if len(xref_1) == 1:
+            data_seg_start = idc.get_segm_start(addr)
+            data_seg_end = idc.get_segm_end(addr)
+            new_addr = xref_1[0].frm
+            addr_set = set()                # to prevent loop reference
+            flag = False                    # mark if we have found a address in vtable
+            vtable_item = None
+            loop_num = 0
+            max_loop_num = 5                # deref 5 layer at most
+            while True:
+                new_xref = [i for i in idautils.XrefsTo(new_addr)]
+                if len(new_xref) == 1:
+                    new_addr = new_xref[0].frm
+                    if data_seg_start <= new_addr and new_addr < data_seg_end:
+                        # if refaddr in data segment
+                        flag = True
+                        vtable_item = new_addr
+                    else:
+                        # if refaddr in code segment
+                        if new_addr in addr_set:
+                            break                   # find loop ref
+                        else:
+                            addr_set.add(new_addr)
+                        loop_num += 1
+                        if loop_num >= max_loop_num:
+                            break
+                else:
+                    # more the one xref, ignore it
+                    break
+
+            if flag:
+                class_name = ""
+                cur_addr = vtable_item
+                max_item_num = 100
+                item_num = 0
+                while True:
+                    cur_addr = idc.prev_head(cur_addr)
+                    if idc.get_func_attr(cur_addr, idc.FUNCATTR_FLAGS) != -1:       # prev address is a function
+                        class_name = idc.get_name(cur_addr, ida_name.GN_VISIBLE)
+                        if len(class_name):     # if is a named address
+                            break               # get the class name
+                    else:
+                        break                   # if is not a function
+                    
+                    item_num += 1
+                    if item_num >= max_item_num:
+                        break
+
+                if len(class_name):
+                    # change the name
+                    name_lst = self._get_class_name(class_name)
+                    class_name = max(name_lst, key=len)
+                    new_name = "%s_MSGMAP"%class_name
+                    idc.set_name(addr, new_name, idc.SN_CHECK)
+                    logger.info("Rename addr 0x%x to %s" %(addr, new_name))
+            else:
+                logger.debug("xref %s not found" %(["%x"%i for i in addr_set]))
+        else:
+            logger.debug("xref_1 %x not found" %addr)
+        
         return msgmapSize
 
     # Search All AFX_MSGMAP
@@ -2215,7 +2340,7 @@ class AFXStructs(object):
                         idaapi.replace_wait_box(strfind)
                         print(strfind)
 
-                        if idc.Name(addr) == "off_%lX" % (addr):
+                        if idc.get_name(addr, ida_name.GN_VISIBLE) == "off_%lX" % (addr):
                             parseCount += 1
 
                         MSGMAPSize = self.Make_MSG_ENTRY(addr)
@@ -2223,7 +2348,7 @@ class AFXStructs(object):
                         value = [
                             totalCount-1,
                             addr,
-                            idc.Name(addr),
+                            idc.get_name(addr, ida_name.GN_VISIBLE),
                             (MSGMAPSize - self.MSGStructSize) / self.MSGStructSize
                         ]
                         values.append(value)
