@@ -1694,22 +1694,23 @@ class logger_t(object):
             self.file_loglevel = file_loglevel
 
         self.log = logging.getLogger()
-        self.log.setLevel(logging.DEBUG)
+        if not len(self.log.handlers):
+            self.log.setLevel(logging.DEBUG)
 
-        self.streamlog = logging.StreamHandler(sys.stderr)
-        stream_filter = logging.Filter()
-        stream_filter.filter = lambda record: record.levelno in self.stream_loglevel
-        self.streamlog.addFilter(stream_filter)
+            self.streamlog = logging.StreamHandler(sys.stderr)
+            stream_filter = logging.Filter()
+            stream_filter.filter = lambda record: record.levelno in self.stream_loglevel
+            self.streamlog.addFilter(stream_filter)
 
-        self.log.addHandler(self.streamlog)
+            self.log.addHandler(self.streamlog)
 
-        if filename != "":
-            self.filelog = logging.FileHandler(filename, "w")
-            filefitler = logging.Filter()
-            filefitler.filter = lambda record: record.levelno in self.file_loglevel
-            self.filelog.addFilter(filefitler)
+            if filename != "":
+                self.filelog = logging.FileHandler(filename, "w")
+                filefitler = logging.Filter()
+                filefitler.filter = lambda record: record.levelno in self.file_loglevel
+                self.filelog.addFilter(filefitler)
 
-            self.log.addHandler(self.filelog)
+                self.log.addHandler(self.filelog)
 
     def debug(self, msg):
         return self.log.debug(msg)
@@ -2238,8 +2239,6 @@ class AFXStructs(object):
         msgmapSize = pEntry - lpEntries + self.MSGStructSize
         
         # corresponding to class
-        if addr == 0x10048f8c:
-            breakpoint()
         xref_1 = [i for i in idautils.XrefsTo(addr)]
         if len(xref_1) == 1:
             data_seg_start = idc.get_segm_start(addr)
@@ -2248,12 +2247,14 @@ class AFXStructs(object):
             addr_set = set()                # to prevent loop reference
             flag = False                    # mark if we have found a address in vtable
             vtable_item = None
+            ref_addr_lst = [new_addr]
             loop_num = 0
             max_loop_num = 5                # deref 5 layer at most
             while True:
                 new_xref = [i for i in idautils.XrefsTo(new_addr)]
                 if len(new_xref) == 1:
                     new_addr = new_xref[0].frm
+                    ref_addr_lst.append(new_addr)
                     if data_seg_start <= new_addr and new_addr < data_seg_end:
                         # if refaddr in data segment
                         flag = True
@@ -2290,12 +2291,28 @@ class AFXStructs(object):
                         break
 
                 if len(class_name):
-                    # change the name
+                    # change the MSGMAP name
                     name_lst = self._get_class_name(class_name)
                     class_name = max(name_lst, key=len)
                     new_name = "%s_MSGMAP"%class_name
                     idc.set_name(addr, new_name, idc.SN_CHECK)
                     logger.info("Rename addr 0x%x to %s" %(addr, new_name))
+                    
+                    # change the GetMessage func name
+                    getmessage_func = ref_addr_lst[0]
+                    cur_name = idc.get_name(getmessage_func, ida_name.GN_VISIBLE)
+                    if cur_name and cur_name.startswith("sub_"):
+                        func_name = "GetMessage%s" %class_name
+                        idc.set_name(getmessage_func, func_name, idc.SN_CHECK)
+                        logger.info("Rename %s at addr 0x%x to %s" %(cur_name, getmessage_func, func_name))
+                    
+                    if len(ref_addr_lst) > 1:
+                        getmessage_wrapper_func = ref_addr_lst[1]
+                        cur_name = idc.get_name(getmessage_wrapper_func, ida_name.GN_VISIBLE)
+                        if cur_name and cur_name.startswith("sub_"):
+                            func_name = "j_GetMessage%s" %class_name
+                            idc.set_name(getmessage_wrapper_func, func_name, idc.SN_CHECK)
+                            logger.info("Rename %s at addr 0x%x to %s" %(cur_name, getmessage_wrapper_func, func_name))
             else:
                 logger.debug("xref %s not found" %(["%x"%i for i in addr_set]))
         else:
