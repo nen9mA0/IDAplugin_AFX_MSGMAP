@@ -2176,16 +2176,16 @@ class AFXStructs(object):
 
         return 1
 
-    # def _get_class_name(self, name):
-    #     pattern = re.compile(r"[a-zA-Z0-9]+")
-    #     name_lst = pattern.findall(name)
-    #     for i in range(len(name_lst)):
-    #         name = name_lst[i]
-    #         for j in range(len(name)):
-    #             if name[j].isalpha():
-    #                 name_lst[i] = name[j:]
-    #                 break
-    #     return name_lst
+    def _get_class_name(self, name):
+        pattern = re.compile(r"[a-zA-Z0-9]+")
+        name_lst = pattern.findall(name)
+        for i in range(len(name_lst)):
+            name = name_lst[i]
+            for j in range(len(name)):
+                if name[j].isalpha():
+                    name_lst[i] = name[j:]
+                    break
+        return name_lst
 
     def Make_MSG_ENTRY(self, addr):
         msgmapSize = 0
@@ -2295,12 +2295,15 @@ class AFXStructs(object):
                     breakpoint()
                     class_demangle_name = idc.demangle_name(class_name, 0)
                     getname_flag = False
-                    tmp_name_lst = class_demangle_name.split(" ")
-                    if len(tmp_name_lst) > 1:
-                        tmp_name_lst = tmp_name_lst[1].split(":")
-                        if len(tmp_name_lst):
-                            class_name = tmp_name_lst[0]
-                            getname_flag = True
+                    try:
+                        tmp_name_lst = class_demangle_name.split(" ")
+                        if len(tmp_name_lst) > 1:
+                            tmp_name_lst = tmp_name_lst[1].split(":")
+                            if len(tmp_name_lst):
+                                class_name = tmp_name_lst[0]
+                                getname_flag = True
+                    except:
+                        pass
                     if not getname_flag:
                         name_lst = self._get_class_name(class_name)
                         class_name = max(name_lst, key=len)
