@@ -2176,16 +2176,16 @@ class AFXStructs(object):
 
         return 1
 
-    def _get_class_name(self, name):
-        pattern = re.compile(r"[a-zA-Z0-9]+")
-        name_lst = pattern.findall(name)
-        for i in range(len(name_lst)):
-            name = name_lst[i]
-            for j in range(len(name)):
-                if name[j].isalpha():
-                    name_lst[i] = name[j:]
-                    break
-        return name_lst
+    # def _get_class_name(self, name):
+    #     pattern = re.compile(r"[a-zA-Z0-9]+")
+    #     name_lst = pattern.findall(name)
+    #     for i in range(len(name_lst)):
+    #         name = name_lst[i]
+    #         for j in range(len(name)):
+    #             if name[j].isalpha():
+    #                 name_lst[i] = name[j:]
+    #                 break
+    #     return name_lst
 
     def Make_MSG_ENTRY(self, addr):
         msgmapSize = 0
@@ -2292,8 +2292,18 @@ class AFXStructs(object):
 
                 if len(class_name):
                     # change the MSGMAP name
-                    name_lst = self._get_class_name(class_name)
-                    class_name = max(name_lst, key=len)
+                    breakpoint()
+                    class_demangle_name = idc.demangle_name(class_name, 0)
+                    getname_flag = False
+                    tmp_name_lst = class_demangle_name.split(" ")
+                    if len(tmp_name_lst) > 1:
+                        tmp_name_lst = tmp_name_lst[1].split(":")
+                        if len(tmp_name_lst):
+                            class_name = tmp_name_lst[0]
+                            getname_flag = True
+                    if not getname_flag:
+                        name_lst = self._get_class_name(class_name)
+                        class_name = max(name_lst, key=len)
                     new_name = "%s_MSGMAP"%class_name
                     idc.set_name(addr, new_name, idc.SN_CHECK)
                     logger.info("Rename addr 0x%x to %s" %(addr, new_name))
@@ -2302,15 +2312,15 @@ class AFXStructs(object):
                     getmessage_func = ref_addr_lst[0]
                     cur_name = idc.get_name(getmessage_func, ida_name.GN_VISIBLE)
                     if cur_name and cur_name.startswith("sub_"):
-                        func_name = "GetMessage%s" %class_name
+                        func_name = "GetMessage_%s" %class_name
                         idc.set_name(getmessage_func, func_name, idc.SN_CHECK)
                         logger.info("Rename %s at addr 0x%x to %s" %(cur_name, getmessage_func, func_name))
-                    
+
                     if len(ref_addr_lst) > 1:
                         getmessage_wrapper_func = ref_addr_lst[1]
                         cur_name = idc.get_name(getmessage_wrapper_func, ida_name.GN_VISIBLE)
                         if cur_name and cur_name.startswith("sub_"):
-                            func_name = "j_GetMessage%s" %class_name
+                            func_name = "j_GetMessage_%s" %class_name
                             idc.set_name(getmessage_wrapper_func, func_name, idc.SN_CHECK)
                             logger.info("Rename %s at addr 0x%x to %s" %(cur_name, getmessage_wrapper_func, func_name))
             else:
